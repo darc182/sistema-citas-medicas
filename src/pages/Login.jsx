@@ -61,7 +61,7 @@ const Login = () => {
                     className="form-control"
                     id="email"
                     name="email"
-                    placeholder="Usuario"
+                    placeholder="admin@hospital.com"
                     value={credentials.email}
                     onChange={handleChange}
                     required
@@ -89,15 +89,6 @@ const Login = () => {
                   </button>
                 </div>
               </form>
-              
-              <div className="text-center mt-4">
-                <small className="text-muted">
-                  Credenciales de prueba:<br />
-                  <strong>Admin:</strong> admin@clinica.com / admin123<br />
-                  <strong>Recepcionista:</strong> recepcion@clinica.com / 123456<br />
-                  <strong>Doctor:</strong> dr.mendoza@clinica.com / doctor123
-                </small>
-              </div>
             </div>
           </div>
         </div>
