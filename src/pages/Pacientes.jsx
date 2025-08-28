@@ -277,22 +277,6 @@ const Pacientes = () => {
                       <option value="AB-">AB-</option>
                     </select>
                   </div>
-                  <div className="col-md-4 mb-3">
-                    <label htmlFor="seguro_medico" className="form-label">Seguro Médico</label>
-                    <select
-                      className="form-control"
-                      id="seguro_medico"
-                      name="seguro_medico"
-                      value={currentPaciente.seguro_medico}
-                      onChange={handleInputChange}
-                    >
-                      <option value="">Seleccionar...</option>
-                      <option value="IESS">IESS</option>
-                      <option value="Particular">Particular</option>
-                      <option value="Seguro Privado">Seguro Privado</option>
-                      <option value="Otro">Otro</option>
-                    </select>
-                  </div>
                 </div>
                 
                 <div className="row">
@@ -362,7 +346,6 @@ const Pacientes = () => {
                       <th>Edad</th>
                       <th>Contacto</th>
                       <th>Tipo Sangre</th>
-                      <th>Seguro</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
@@ -385,9 +368,6 @@ const Pacientes = () => {
                             {paciente.tipo_sangre && (
                               <span className="badge bg-danger">{paciente.tipo_sangre}</span>
                             )}
-                          </td>
-                          <td>
-                            <span className="badge bg-info text-dark">{paciente.seguro_medico}</span>
                           </td>
                           <td>
                             <div className="btn-group btn-group-sm">
@@ -439,18 +419,18 @@ const Pacientes = () => {
         <div className="col-md-3">
           <div className="card bg-success text-white">
             <div className="card-body text-center">
-              <i className="bi bi-shield-check fs-1 mb-2"></i>
-              <h4>{pacientes.filter(p => p.seguro_medico === 'IESS').length}</h4>
-              <p className="mb-0">Con IESS</p>
+              <i className="bi bi-gender-male fs-1 mb-2"></i>
+              <h4>{pacientes.filter(p => p.genero === 'masculino').length}</h4>
+              <p className="mb-0">Hombres</p>
             </div>
           </div>
         </div>
         <div className="col-md-3">
           <div className="card bg-warning text-white">
             <div className="card-body text-center">
-              <i className="bi bi-cash fs-1 mb-2"></i>
-              <h4>{pacientes.filter(p => p.seguro_medico === 'Particular').length}</h4>
-              <p className="mb-0">Particulares</p>
+              <i className="bi bi-gender-female fs-1 mb-2"></i>
+              <h4>{pacientes.filter(p => p.genero === 'femenino').length}</h4>
+              <p className="mb-0">Mujeres</p>
             </div>
           </div>
         </div>
