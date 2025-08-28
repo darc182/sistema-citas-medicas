@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, useMemo } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { mockCitas, mockPacientes, mockDoctores } from '../data/mockData';
+import { apiService } from '../services/api';
 
 const Citas = () => {
   const { user } = useContext(AuthContext);
@@ -16,15 +16,15 @@ const Citas = () => {
   const [currentCita, setCurrentCita] = useState({
     id: null,
     codigo: '',
-    id_paciente: '',
-    id_doctor: '',
+    paciente_id: '',
+    doctor_id: '',
     fecha: '',
     hora: '',
-    motivo: '',
+    motivo_consulta: '',
     observaciones: '',
-    estado: 'Programada',
-    tipo_cita: 'Consulta',
-    duracion_minutos: 30
+    estado: 'programada',
+    tipo_cita: 'consulta',
+    precio: 0
   });
   
   // Estado para el modo de edición
@@ -33,48 +33,65 @@ const Citas = () => {
   
   // Cargar datos al montar el componente
   useEffect(() => {
-    console.log('Cargando datos de citas...');
-    
     const fetchData = async () => {
       try {
-        // Simular una llamada a la API con un retardo reducido
-        setTimeout(() => {
-          console.log('Datos cargados:', { citas: mockCitas.length, pacientes: mockPacientes.length, doctores: mockDoctores.length });
-          setCitas(mockCitas);
-          setPacientes(mockPacientes);
-          setDoctores(mockDoctores);
-          setLoading(false);
-        }, 300); // Reducido de 500ms a 300ms
+        setLoading(true);
+        const [citasResponse, pacientesResponse, doctoresResponse] = await Promise.all([
+          apiService.getCitas(),
+          apiService.getPacientes(),
+          apiService.getDoctores()
+        ]);
+        
+        setCitas(citasResponse);
+        setPacientes(pacientesResponse);
+        setDoctores(doctoresResponse);
+        setError(null);
       } catch (err) {
         console.error('Error al cargar datos:', err);
-        setError('Error al cargar los datos');
+        setError('Error al cargar los datos: ' + (err.message || 'Error desconocido'));
+      } finally {
         setLoading(false);
       }
     };
-    
+
     fetchData();
   }, []);
 
   // Helper para obtener el nombre del paciente (memoizado)
   const getPacienteNombre = useMemo(() => {
-    return (pacienteId) => {
-      const paciente = pacientes.find(p => p.id === parseInt(pacienteId));
+    return (cita) => {
+      // Primero intentar usar los datos relacionales de la cita
+      if (cita.pacientes) {
+        return `${cita.pacientes.nombre} ${cita.pacientes.apellido}`;
+      }
+      // Fallback a buscar en la lista de pacientes
+      const paciente = pacientes.find(p => p.id === cita.paciente_id);
       return paciente ? `${paciente.nombre} ${paciente.apellido}` : 'No disponible';
     };
   }, [pacientes]);
 
   // Helper para obtener el nombre del doctor (memoizado)
   const getDoctorNombre = useMemo(() => {
-    return (doctorId) => {
-      const doctor = doctores.find(d => d.id === parseInt(doctorId));
+    return (cita) => {
+      // Primero intentar usar los datos relacionales de la cita
+      if (cita.doctores) {
+        return `Dr. ${cita.doctores.nombre} ${cita.doctores.apellido}`;
+      }
+      // Fallback a buscar en la lista de doctores
+      const doctor = doctores.find(d => d.id === cita.doctor_id);
       return doctor ? `Dr. ${doctor.nombre} ${doctor.apellido}` : 'No disponible';
     };
   }, [doctores]);
 
   // Helper para obtener la especialidad del doctor (memoizado)
   const getDoctorEspecialidad = useMemo(() => {
-    return (doctorId) => {
-      const doctor = doctores.find(d => d.id === parseInt(doctorId));
+    return (cita) => {
+      // Primero intentar usar los datos relacionales de la cita
+      if (cita.doctores) {
+        return cita.doctores.especialidad;
+      }
+      // Fallback a buscar en la lista de doctores
+      const doctor = doctores.find(d => d.id === cita.doctor_id);
       return doctor ? doctor.especialidad : '';
     };
   }, [doctores]);
@@ -82,21 +99,21 @@ const Citas = () => {
   // Filtrar citas con useMemo para optimizar rendimiento
   const filteredCitas = useMemo(() => {
     return citas.filter(cita => {
-      const pacienteNombre = getPacienteNombre(cita.id_paciente).toLowerCase();
-      const doctorNombre = getDoctorNombre(cita.id_doctor).toLowerCase();
+      const pacienteNombre = getPacienteNombre(cita).toLowerCase();
+      const doctorNombre = getDoctorNombre(cita).toLowerCase();
       const searchLower = searchTerm.toLowerCase();
       
       const matchesSearch = !searchTerm || 
-        cita.codigo.toLowerCase().includes(searchLower) ||
+        (cita.codigo && cita.codigo.toLowerCase().includes(searchLower)) ||
         pacienteNombre.includes(searchLower) ||
         doctorNombre.includes(searchLower) ||
-        cita.motivo.toLowerCase().includes(searchLower);
+        (cita.motivo_consulta && cita.motivo_consulta.toLowerCase().includes(searchLower));
       
       const matchesEstado = !filterEstado || cita.estado === filterEstado;
       
       return matchesSearch && matchesEstado;
     });
-  }, [citas, searchTerm, filterEstado, pacientes, doctores, getPacienteNombre, getDoctorNombre]);
+  }, [citas, searchTerm, filterEstado, getPacienteNombre, getDoctorNombre]);
 
   // Manejadores del formulario
   const handleInputChange = (e) => {
@@ -111,45 +128,52 @@ const Citas = () => {
     setCurrentCita({
       id: null,
       codigo: '',
-      id_paciente: '',
-      id_doctor: '',
+      paciente_id: '',
+      doctor_id: '',
       fecha: '',
       hora: '',
-      motivo: '',
+      motivo_consulta: '',
       observaciones: '',
-      estado: 'Programada',
-      tipo_cita: 'Consulta',
-      duracion_minutos: 30
+      estado: 'programada',
+      tipo_cita: 'consulta',
+      precio: 0
     });
     setIsEditing(false);
     setShowForm(false);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Generar código automáticamente si no se proporciona
-    const citaData = {
-      ...currentCita,
-      codigo: currentCita.codigo || `CITA-${Date.now().toString().slice(-6)}`
-    };
-    
-    if (isEditing) {
-      // Actualizar una cita existente
-      const updatedCitas = citas.map(cita => 
-        cita.id === citaData.id ? citaData : cita
-      );
-      setCitas(updatedCitas);
-    } else {
-      // Crear una nueva cita
-      const newCita = {
-        ...citaData,
-        id: Date.now() // Generar un ID único (en producción esto lo haría el backend)
+    try {
+      setLoading(true);
+      // Generar código automáticamente si no se proporciona
+      const citaData = {
+        ...currentCita,
+        codigo: currentCita.codigo || `CITA-${Date.now().toString().slice(-6)}`
       };
-      setCitas([...citas, newCita]);
+      
+      if (isEditing) {
+        // Actualizar una cita existente
+        const updatedCita = await apiService.updateCita(citaData.id, citaData);
+        const updatedCitas = citas.map(cita => 
+          cita.id === citaData.id ? updatedCita : cita
+        );
+        setCitas(updatedCitas);
+      } else {
+        // Crear una nueva cita
+        const newCita = await apiService.createCita(citaData);
+        setCitas([...citas, newCita]);
+      }
+      
+      resetForm();
+      setError(null);
+    } catch (err) {
+      console.error('Error al guardar cita:', err);
+      setError('Error al guardar la cita: ' + (err.message || 'Error desconocido'));
+    } finally {
+      setLoading(false);
     }
-    
-    resetForm();
   };
 
   const handleEdit = (cita) => {
@@ -158,9 +182,21 @@ const Citas = () => {
     setShowForm(true);
   };
 
-  const handleDelete = (id) => {
-    // En un entorno real, aquí harías una llamada DELETE a la API
-    setCitas(citas.filter(cita => cita.id !== id));
+  const handleDelete = async (id) => {
+    if (window.confirm('¿Estás seguro de que quieres eliminar esta cita?')) {
+      try {
+        setLoading(true);
+        await apiService.deleteCita(id);
+        const updatedCitas = citas.filter(cita => cita.id !== id);
+        setCitas(updatedCitas);
+        setError(null);
+      } catch (err) {
+        console.error('Error al eliminar cita:', err);
+        setError('Error al eliminar la cita: ' + (err.message || 'Error desconocido'));
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   // Helper para formatear fecha y hora
@@ -176,8 +212,20 @@ const Citas = () => {
     return `${fechaFormato} ${hora || ''}`;
   };
 
-  // Verificar que todos los datos estén cargados antes de renderizar la interfaz
-  if (loading || !citas.length || !pacientes.length || !doctores.length) {
+  // Verificar si hay error
+  if (error) {
+    return (
+      <div className="container mt-4">
+        <div className="alert alert-danger d-flex align-items-center" role="alert">
+          <i className="bi bi-exclamation-triangle-fill me-2"></i>
+          <div>{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar loading solo si está cargando y no hay datos
+  if (loading && citas.length === 0) {
     return (
       <div className="container mt-4">
         <div className="d-flex justify-content-center py-5">
@@ -188,17 +236,6 @@ const Citas = () => {
             <h5>Cargando sistema de citas...</h5>
             <p className="text-muted">Por favor espere un momento</p>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mt-4">
-        <div className="alert alert-danger d-flex align-items-center" role="alert">
-          <i className="bi bi-exclamation-triangle-fill me-2"></i>
-          <div>{error}</div>
         </div>
       </div>
     );
@@ -259,10 +296,11 @@ const Citas = () => {
               onChange={(e) => setFilterEstado(e.target.value)}
             >
               <option value="">Todos los estados</option>
-              <option value="Programada">Programada</option>
-              <option value="Completada">Completada</option>
-              <option value="Cancelada">Cancelada</option>
-              <option value="En curso">En curso</option>
+              <option value="programada">Programada</option>
+              <option value="en_curso">En curso</option>
+              <option value="completada">Completada</option>
+              <option value="cancelada">Cancelada</option>
+              <option value="no_asistio">No asistió</option>
             </select>
           </div>
         </div>
@@ -329,9 +367,9 @@ const Citas = () => {
                   <div className="form-floating">
                     <select
                       className="form-control"
-                      id="id_paciente"
-                      name="id_paciente"
-                      value={currentCita.id_paciente}
+                      id="paciente_id"
+                      name="paciente_id"
+                      value={currentCita.paciente_id}
                       onChange={handleInputChange}
                       required
                     >
@@ -342,16 +380,16 @@ const Citas = () => {
                         </option>
                       ))}
                     </select>
-                    <label htmlFor="id_paciente">Paciente *</label>
+                    <label htmlFor="paciente_id">Paciente *</label>
                   </div>
                 </div>
                 <div className="col-md-6 mb-3">
                   <div className="form-floating">
                     <select
                       className="form-control"
-                      id="id_doctor"
-                      name="id_doctor"
-                      value={currentCita.id_doctor}
+                      id="doctor_id"
+                      name="doctor_id"
+                      value={currentCita.doctor_id}
                       onChange={handleInputChange}
                       required
                     >
@@ -362,7 +400,7 @@ const Citas = () => {
                         </option>
                       ))}
                     </select>
-                    <label htmlFor="id_doctor">Doctor *</label>
+                    <label htmlFor="doctor_id">Doctor *</label>
                   </div>
                 </div>
               </div>
@@ -377,32 +415,12 @@ const Citas = () => {
                       value={currentCita.tipo_cita}
                       onChange={handleInputChange}
                     >
-                      <option value="Consulta">Consulta</option>
-                      <option value="Control">Control</option>
-                      <option value="Urgencia">Urgencia</option>
-                      <option value="Cirugía">Cirugía</option>
-                      <option value="Exámenes">Exámenes</option>
+                      <option value="consulta">Consulta</option>
+                      <option value="control">Control</option>
+                      <option value="procedimiento">Procedimiento</option>
+                      <option value="cirugia">Cirugía</option>
                     </select>
                     <label htmlFor="tipo_cita">Tipo de Cita</label>
-                  </div>
-                </div>
-                <div className="col-md-3 mb-3">
-                  <div className="form-floating">
-                    <select
-                      className="form-control"
-                      id="duracion_minutos"
-                      name="duracion_minutos"
-                      value={currentCita.duracion_minutos}
-                      onChange={handleInputChange}
-                    >
-                      <option value="15">15 minutos</option>
-                      <option value="30">30 minutos</option>
-                      <option value="45">45 minutos</option>
-                      <option value="60">1 hora</option>
-                      <option value="90">1.5 horas</option>
-                      <option value="120">2 horas</option>
-                    </select>
-                    <label htmlFor="duracion_minutos">Duración</label>
                   </div>
                 </div>
                 <div className="col-md-3 mb-3">
@@ -414,12 +432,28 @@ const Citas = () => {
                       value={currentCita.estado}
                       onChange={handleInputChange}
                     >
-                      <option value="Programada">Programada</option>
-                      <option value="Completada">Completada</option>
-                      <option value="Cancelada">Cancelada</option>
-                      <option value="En curso">En curso</option>
+                      <option value="programada">Programada</option>
+                      <option value="en_curso">En curso</option>
+                      <option value="completada">Completada</option>
+                      <option value="cancelada">Cancelada</option>
+                      <option value="no_asistio">No asistió</option>
                     </select>
                     <label htmlFor="estado">Estado</label>
+                  </div>
+                </div>
+                <div className="col-md-3 mb-3">
+                  <div className="form-floating">
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-control"
+                      id="precio"
+                      name="precio"
+                      placeholder="Precio"
+                      value={currentCita.precio || 0}
+                      onChange={handleInputChange}
+                    />
+                    <label htmlFor="precio">Precio ($)</label>
                   </div>
                 </div>
               </div>
@@ -430,14 +464,14 @@ const Citas = () => {
                     <textarea
                       className="form-control"
                       style={{ height: '100px' }}
-                      id="motivo"
-                      name="motivo"
+                      id="motivo_consulta"
+                      name="motivo_consulta"
                       placeholder="Motivo de la consulta"
-                      value={currentCita.motivo}
+                      value={currentCita.motivo_consulta}
                       onChange={handleInputChange}
                       required
                     ></textarea>
-                    <label htmlFor="motivo">Motivo de la Consulta *</label>
+                    <label htmlFor="motivo_consulta">Motivo de la Consulta *</label>
                   </div>
                 </div>
                 <div className="col-md-6 mb-3">
@@ -498,53 +532,56 @@ const Citas = () => {
                   filteredCitas.slice(0, 50).map(cita => ( // Limitar a 50 citas por página para rendimiento
                     <tr key={cita.id}>
                       <td>
-                        <span className="badge bg-primary">{cita.codigo}</span>
+                        <span className="badge bg-primary">
+                          {cita.codigo || `CITA-${cita.id?.slice(-6)}`}
+                        </span>
                       </td>
                       <td>
                         <div>
-                          <strong>{getPacienteNombre(cita.id_paciente)}</strong>
+                          <strong>{getPacienteNombre(cita)}</strong>
                           <br />
                           <small className="text-muted">
                             <i className="bi bi-card-text me-1"></i>
-                            {cita.motivo.substring(0, 30)}...
+                            {cita.motivo_consulta ? cita.motivo_consulta.substring(0, 30) : 'Sin motivo'}...
                           </small>
                         </div>
                       </td>
                       <td>
                         <div>
-                          <strong>{getDoctorNombre(cita.id_doctor)}</strong>
+                          <strong>{getDoctorNombre(cita)}</strong>
                           <br />
-                          <small className="text-muted">{getDoctorEspecialidad(cita.id_doctor)}</small>
+                          <small className="text-muted">{getDoctorEspecialidad(cita)}</small>
                         </div>
                       </td>
                       <td>
                         <div>
                           <i className="bi bi-calendar3 me-1"></i>
                           {formatFechaHora(cita.fecha, cita.hora)}
-                          <br />
-                          <small className="text-muted">
-                            <i className="bi bi-clock me-1"></i>
-                            {cita.duracion_minutos} min
-                          </small>
                         </div>
                       </td>
                       <td>
                         <span className={`badge ${
-                          cita.tipo_cita === 'Urgencia' ? 'bg-danger' :
-                          cita.tipo_cita === 'Cirugía' ? 'bg-warning' :
-                          cita.tipo_cita === 'Control' ? 'bg-info' : 'bg-secondary'
+                          cita.tipo_cita === 'cirugia' ? 'bg-warning' :
+                          cita.tipo_cita === 'procedimiento' ? 'bg-danger' :
+                          cita.tipo_cita === 'control' ? 'bg-info' : 'bg-secondary'
                         }`}>
-                          {cita.tipo_cita}
+                          {cita.tipo_cita === 'cirugia' ? 'cirugía' : 
+                           cita.tipo_cita === 'procedimiento' ? 'procedimiento' :
+                           cita.tipo_cita === 'control' ? 'control' : 'consulta'}
                         </span>
                       </td>
                       <td>
                         <span className={`badge ${
-                          cita.estado === 'Completada' ? 'bg-success' : 
-                          cita.estado === 'Programada' ? 'bg-primary' :
-                          cita.estado === 'En curso' ? 'bg-warning' :
-                          cita.estado === 'Cancelada' ? 'bg-danger' : 'bg-secondary'
+                          cita.estado === 'completada' ? 'bg-success' : 
+                          cita.estado === 'programada' ? 'bg-primary' :
+                          cita.estado === 'en_curso' ? 'bg-warning' :
+                          cita.estado === 'cancelada' ? 'bg-danger' : 'bg-secondary'
                         }`}>
-                          {cita.estado}
+                          {cita.estado === 'programada' ? 'programada' :
+                           cita.estado === 'completada' ? 'completada' :
+                           cita.estado === 'en_curso' ? 'en curso' :
+                           cita.estado === 'cancelada' ? 'cancelada' :
+                           cita.estado === 'no_asistio' ? 'no asistió' : cita.estado}
                         </span>
                       </td>
                       <td>
@@ -618,7 +655,7 @@ const Citas = () => {
                 <small className="opacity-75">Citas finalizadas</small>
               </div>
               <div className="fs-2 fw-bold">
-                {filteredCitas.filter(c => c.estado === 'Completada').length}
+                {filteredCitas.filter(c => c.estado === 'completada').length}
               </div>
             </div>
           </div>
@@ -631,7 +668,7 @@ const Citas = () => {
                 <small className="opacity-75">Pendientes</small>
               </div>
               <div className="fs-2 fw-bold">
-                {filteredCitas.filter(c => c.estado === 'Programada').length}
+                {filteredCitas.filter(c => c.estado === 'programada').length}
               </div>
             </div>
           </div>
@@ -644,7 +681,7 @@ const Citas = () => {
                 <small className="opacity-75">No realizadas</small>
               </div>
               <div className="fs-2 fw-bold">
-                {filteredCitas.filter(c => c.estado === 'Cancelada').length}
+                {filteredCitas.filter(c => c.estado === 'cancelada').length}
               </div>
             </div>
           </div>

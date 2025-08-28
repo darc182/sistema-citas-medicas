@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { mockDoctores } from '../data/mockData';
+import { apiService } from '../services/api';
 
 const Doctores = () => {
   const { user } = useContext(AuthContext);
@@ -20,10 +20,12 @@ const Doctores = () => {
     telefono: '',
     especialidad: '',
     numero_licencia: '',
-    consultorio: '',
-    horario_atencion: '',
-    anos_experiencia: '',
-    universidad: ''
+    universidad: '',
+    experiencia_anos: 0,
+    consulta_precio: 0,
+    horario_atencion: null,
+    dias_disponibles: [],
+    disponible: true
   });
   
   // Estado para el modo de edición
@@ -32,17 +34,15 @@ const Doctores = () => {
   
   // Cargar datos al montar el componente
   useEffect(() => {
-    // En un entorno real, aquí harías una llamada a la API
-    // Por ahora, simulamos con datos mock
     const fetchData = async () => {
       try {
-        // Simular una llamada a la API con un retardo
-        setTimeout(() => {
-          setDoctores(mockDoctores);
-          setLoading(false);
-        }, 500);
+        setLoading(true);
+        const response = await apiService.getAll('doctores');
+        setDoctores(response.doctores || []); // response.doctores del backend
+        setLoading(false);
       } catch (err) {
-        setError('Error al cargar los datos');
+        console.error('Error al cargar doctores:', err);
+        setError('Error al cargar los datos de doctores');
         setLoading(false);
       }
     };
@@ -53,10 +53,11 @@ const Doctores = () => {
   // Filtrar doctores por término de búsqueda
   const filteredDoctores = doctores.filter(doctor => {
     return (
-      doctor.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doctor.apellido.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doctor.especialidad.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doctor.consultorio.toLowerCase().includes(searchTerm.toLowerCase())
+      doctor.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      doctor.apellido?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      doctor.especialidad?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      doctor.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      doctor.cedula?.includes(searchTerm)
     );
   });
 
@@ -79,34 +80,44 @@ const Doctores = () => {
       telefono: '',
       especialidad: '',
       numero_licencia: '',
-      consultorio: '',
-      horario_atencion: '',
-      anos_experiencia: '',
-      universidad: ''
+      universidad: '',
+      experiencia_anos: 0,
+      consulta_precio: 0,
+      horario_atencion: null,
+      dias_disponibles: [],
+      disponible: true
     });
     setIsEditing(false);
     setShowForm(false);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (isEditing) {
-      // Actualizar un doctor existente
-      const updatedDoctores = doctores.map(doctor => 
-        doctor.id === currentDoctor.id ? currentDoctor : doctor
-      );
-      setDoctores(updatedDoctores);
-    } else {
-      // Crear un nuevo doctor
-      const newDoctor = {
-        ...currentDoctor,
-        id: Date.now() // Generar un ID único (en producción esto lo haría el backend)
-      };
-      setDoctores([...doctores, newDoctor]);
+    try {
+      setLoading(true);
+      
+      if (isEditing) {
+        // Actualizar un doctor existente
+        const response = await apiService.update('doctores', currentDoctor.id, currentDoctor);
+        const updatedDoctores = doctores.map(doctor => 
+          doctor.id === currentDoctor.id ? response.doctor : doctor
+        );
+        setDoctores(updatedDoctores);
+      } else {
+        // Crear un nuevo doctor
+        const response = await apiService.create('doctores', currentDoctor);
+        setDoctores([...doctores, response.doctor]);
+      }
+      
+      resetForm();
+      setError(null);
+    } catch (err) {
+      console.error('Error al guardar doctor:', err);
+      setError(err.message || 'Error al guardar el doctor');
+    } finally {
+      setLoading(false);
     }
-    
-    resetForm();
   };
 
   const handleEdit = (doctor) => {
@@ -115,9 +126,20 @@ const Doctores = () => {
     setShowForm(true);
   };
 
-  const handleDelete = (id) => {
-    // En un entorno real, aquí harías una llamada DELETE a la API
-    setDoctores(doctores.filter(doctor => doctor.id !== id));
+  const handleDelete = async (id) => {
+    if (window.confirm('¿Está seguro de que desea eliminar este doctor?')) {
+      try {
+        setLoading(true);
+        await apiService.delete('doctores', id);
+        setDoctores(doctores.filter(doctor => doctor.id !== id));
+        setError(null);
+      } catch (err) {
+        console.error('Error al eliminar doctor:', err);
+        setError(err.message || 'Error al eliminar el doctor');
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   if (loading) {
@@ -349,13 +371,13 @@ const Doctores = () => {
                     <input
                       type="text"
                       className="form-control"
-                      id="consultorio"
-                      name="consultorio"
-                      placeholder="Consultorio"
-                      value={currentDoctor.consultorio}
+                      id="universidad"
+                      name="universidad"
+                      placeholder="Universidad"
+                      value={currentDoctor.universidad}
                       onChange={handleInputChange}
                     />
-                    <label htmlFor="consultorio">Consultorio</label>
+                    <label htmlFor="universidad">Universidad</label>
                   </div>
                 </div>
               </div>
@@ -369,7 +391,7 @@ const Doctores = () => {
                       id="horario_atencion"
                       name="horario_atencion"
                       placeholder="Horario de Atención"
-                      value={currentDoctor.horario_atencion}
+                      value={currentDoctor.horario_atencion || ''}
                       onChange={handleInputChange}
                     />
                     <label htmlFor="horario_atencion">Horario de Atención</label>
@@ -380,29 +402,47 @@ const Doctores = () => {
                     <input
                       type="number"
                       className="form-control"
-                      id="anos_experiencia"
-                      name="anos_experiencia"
+                      id="experiencia_anos"
+                      name="experiencia_anos"
                       placeholder="Años de Experiencia"
-                      value={currentDoctor.anos_experiencia}
+                      value={currentDoctor.experiencia_anos || 0}
                       onChange={handleInputChange}
                     />
-                    <label htmlFor="anos_experiencia">Años de Experiencia</label>
+                    <label htmlFor="experiencia_anos">Años de Experiencia</label>
                   </div>
                 </div>
               </div>
               
-              <div className="mb-3">
-                <div className="form-floating">
-                  <input
-                    type="text"
-                    className="form-control"
-                    id="universidad"
-                    name="universidad"
-                    placeholder="Universidad"
-                    value={currentDoctor.universidad}
-                    onChange={handleInputChange}
-                  />
-                  <label htmlFor="universidad">Universidad</label>
+              <div className="row">
+                <div className="col-md-6 mb-3">
+                  <div className="form-floating">
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="form-control"
+                      id="consulta_precio"
+                      name="consulta_precio"
+                      placeholder="Precio de Consulta"
+                      value={currentDoctor.consulta_precio || 0}
+                      onChange={handleInputChange}
+                    />
+                    <label htmlFor="consulta_precio">Precio de Consulta ($)</label>
+                  </div>
+                </div>
+                <div className="col-md-6 mb-3">
+                  <div className="form-check form-switch mt-3">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="disponible"
+                      name="disponible"
+                      checked={currentDoctor.disponible}
+                      onChange={(e) => setCurrentDoctor(prev => ({ ...prev, disponible: e.target.checked }))}
+                    />
+                    <label className="form-check-label" htmlFor="disponible">
+                      Doctor Disponible
+                    </label>
+                  </div>
                 </div>
               </div>
               
@@ -438,7 +478,7 @@ const Doctores = () => {
                     <th scope="col" className="py-3">ID</th>
                     <th scope="col" className="py-3">Doctor</th>
                     <th scope="col" className="py-3">Especialidad</th>
-                    <th scope="col" className="py-3">Consultorio</th>
+                    <th scope="col" className="py-3">Precio</th>
                     <th scope="col" className="py-3">Experiencia</th>
                     <th scope="col" className="py-3">Contacto</th>
                     <th scope="col" className="py-3">Acciones</th>
@@ -459,8 +499,8 @@ const Doctores = () => {
                         <td>
                           <span className="badge bg-primary">{doctor.especialidad}</span>
                         </td>
-                        <td>{doctor.consultorio}</td>
-                        <td>{doctor.anos_experiencia} años</td>
+                        <td>${doctor.consulta_precio || 0}</td>
+                        <td>{doctor.experiencia_anos || 0} años</td>
                         <td>
                           <div>
                             <small>{doctor.email}</small>
@@ -519,7 +559,7 @@ const Doctores = () => {
                 <div className="card h-100 shadow-sm border-0">
                   <div className="card-header bg-white d-flex justify-content-between align-items-center py-3">
                     <span className="badge bg-primary rounded-pill">{doctor.especialidad}</span>
-                    <span className="badge bg-light text-dark">{doctor.consultorio}</span>
+                    <span className="badge bg-success rounded-pill">${doctor.consulta_precio || 0}</span>
                   </div>
                   <div className="card-body d-flex flex-column">
                     <h5 className="card-title">{doctor.nombre} {doctor.apellido}</h5>
@@ -535,7 +575,7 @@ const Doctores = () => {
                       <div className="d-flex justify-content-between align-items-center">
                         <span className="text-muted">
                           <i className="bi bi-calendar-check me-1"></i>
-                          {doctor.anos_experiencia} años exp.
+                          {doctor.experiencia_anos || 0} años exp.
                         </span>
                       </div>
                       <div className="mt-2">
@@ -619,7 +659,7 @@ const Doctores = () => {
                 <small className="opacity-75">Años de práctica</small>
               </div>
               <div className="fs-2 fw-bold">
-                {filteredDoctores.length > 0 ? Math.round(filteredDoctores.reduce((sum, d) => sum + parseInt(d.anos_experiencia || 0), 0) / filteredDoctores.length) : 0}
+                {filteredDoctores.length > 0 ? Math.round(filteredDoctores.reduce((sum, d) => sum + parseInt(d.experiencia_anos || 0), 0) / filteredDoctores.length) : 0}
               </div>
             </div>
           </div>
@@ -628,11 +668,11 @@ const Doctores = () => {
           <div className="card bg-info text-white border-0 shadow-sm">
             <div className="card-body d-flex justify-content-between align-items-center py-3">
               <div>
-                <h5 className="mb-0">Consultorios</h5>
-                <small className="opacity-75">Espacios activos</small>
+                <h5 className="mb-0">Disponibles</h5>
+                <small className="opacity-75">Doctores activos</small>
               </div>
               <div className="fs-2 fw-bold">
-                {[...new Set(filteredDoctores.map(d => d.consultorio).filter(c => c))].length}
+                {filteredDoctores.filter(d => d.disponible).length}
               </div>
             </div>
           </div>

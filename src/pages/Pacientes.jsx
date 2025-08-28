@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { mockPacientes } from '../data/mockData';
+import { apiService } from '../services/api';
 
 const Pacientes = () => {
   const { user } = useContext(AuthContext);
@@ -17,10 +17,13 @@ const Pacientes = () => {
     email: '',
     telefono: '',
     fecha_nacimiento: '',
+    genero: '',
     direccion: '',
     tipo_sangre: '',
     alergias: '',
-    seguro_medico: ''
+    enfermedades_cronicas: '',
+    contacto_emergencia_nombre: '',
+    contacto_emergencia_telefono: ''
   });
   
   // Estado para el modo de edición
@@ -28,22 +31,21 @@ const Pacientes = () => {
   
   // Cargar datos al montar el componente
   useEffect(() => {
-    // En un entorno real, aquí harías una llamada a la API
-    // Por ahora, simulamos con datos mock
-    const fetchData = async () => {
+    const fetchPacientes = async () => {
       try {
-        // Simular una llamada a la API con un retardo
-        setTimeout(() => {
-          setPacientes(mockPacientes);
-          setLoading(false);
-        }, 500);
+        setLoading(true);
+        const response = await apiService.getPacientes();
+        setPacientes(response);
+        setError(null);
       } catch (err) {
-        setError('Error al cargar los datos');
+        console.error('Error al cargar pacientes:', err);
+        setError('Error al cargar los pacientes: ' + (err.message || 'Error desconocido'));
+      } finally {
         setLoading(false);
       }
     };
-    
-    fetchData();
+
+    fetchPacientes();
   }, []);
 
   // Manejadores del formulario
@@ -64,33 +66,43 @@ const Pacientes = () => {
       email: '',
       telefono: '',
       fecha_nacimiento: '',
+      genero: '',
       direccion: '',
       tipo_sangre: '',
       alergias: '',
-      seguro_medico: ''
+      enfermedades_cronicas: '',
+      contacto_emergencia_nombre: '',
+      contacto_emergencia_telefono: ''
     });
     setIsEditing(false);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (isEditing) {
-      // Actualizar un paciente existente
-      const updatedPacientes = pacientes.map(paciente => 
-        paciente.id === currentPaciente.id ? currentPaciente : paciente
-      );
-      setPacientes(updatedPacientes);
-    } else {
-      // Crear un nuevo paciente
-      const newPaciente = {
-        ...currentPaciente,
-        id: Date.now() // Generar un ID único (en producción esto lo haría el backend)
-      };
-      setPacientes([...pacientes, newPaciente]);
+    try {
+      setLoading(true);
+      if (isEditing) {
+        // Actualizar un paciente existente
+        const updatedPaciente = await apiService.updatePaciente(currentPaciente.id, currentPaciente);
+        const updatedPacientes = pacientes.map(paciente => 
+          paciente.id === currentPaciente.id ? updatedPaciente : paciente
+        );
+        setPacientes(updatedPacientes);
+      } else {
+        // Crear un nuevo paciente
+        const newPaciente = await apiService.createPaciente(currentPaciente);
+        setPacientes([...pacientes, newPaciente]);
+      }
+      
+      resetForm();
+      setError(null);
+    } catch (err) {
+      console.error('Error al guardar paciente:', err);
+      setError('Error al guardar el paciente: ' + (err.message || 'Error desconocido'));
+    } finally {
+      setLoading(false);
     }
-    
-    resetForm();
   };
 
   const handleEdit = (paciente) => {
@@ -98,9 +110,21 @@ const Pacientes = () => {
     setIsEditing(true);
   };
 
-  const handleDelete = (id) => {
-    // En un entorno real, aquí harías una llamada DELETE a la API
-    setPacientes(pacientes.filter(paciente => paciente.id !== id));
+  const handleDelete = async (id) => {
+    if (window.confirm('¿Estás seguro de que quieres eliminar este paciente?')) {
+      try {
+        setLoading(true);
+        await apiService.deletePaciente(id);
+        const updatedPacientes = pacientes.filter(paciente => paciente.id !== id);
+        setPacientes(updatedPacientes);
+        setError(null);
+      } catch (err) {
+        console.error('Error al eliminar paciente:', err);
+        setError('Error al eliminar el paciente: ' + (err.message || 'Error desconocido'));
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   const calcularEdad = (fechaNacimiento) => {

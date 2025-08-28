@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect } from 'react';
+import { apiService } from '../services/api';
 
 export const AuthContext = createContext();
 
@@ -9,7 +10,9 @@ export const AuthProvider = ({ children }) => {
   // Cargar el usuario del localStorage al iniciar la aplicación
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
-    if (storedUser) {
+    const token = localStorage.getItem('token');
+    
+    if (storedUser && token) {
       setUser(JSON.parse(storedUser));
     }
     setLoading(false);
@@ -18,42 +21,78 @@ export const AuthProvider = ({ children }) => {
   // Función de inicio de sesión
   const login = async (credentials) => {
     try {
-      // En un entorno real, aquí se haría una llamada a la API
-      // Por ahora, simulamos la verificación con datos mock
+      setLoading(true);
       
-      // Simulamos datos de usuarios para pruebas
-      const mockUsers = [
-        { id: 1, email: 'admin@clinica.com', password: 'admin123', nombre: 'Administrador', apellido: 'Sistema' },
-        { id: 2, email: 'recepcion@clinica.com', password: '123456', nombre: 'Recepcionista', apellido: 'Principal' },
-        { id: 3, email: 'dr.mendoza@clinica.com', password: 'doctor123', nombre: 'Dr. Roberto', apellido: 'Mendoza' }
-      ];
+      // Usar la API real para el login
+      const result = await apiService.auth.login(credentials);
       
-      const foundUser = mockUsers.find(
-        (u) => u.email === credentials.email && u.password === credentials.password
-      );
-
-      if (foundUser) {
-        // Omitimos la contraseña por seguridad
-        const { password, ...userWithoutPassword } = foundUser;
-        setUser(userWithoutPassword);
-        localStorage.setItem('user', JSON.stringify(userWithoutPassword));
-        return { success: true, user: userWithoutPassword };
+      if (result.success) {
+        setUser(result.user);
+        return { success: true, user: result.user };
       } else {
-        return { success: false, message: 'Usuario o contraseña incorrectos' };
+        return { success: false, message: result.message };
       }
     } catch (error) {
-      return { success: false, message: 'Error al iniciar sesión' };
+      console.error('Error en login:', error);
+      return { 
+        success: false, 
+        message: error.response?.data?.message || 'Error al iniciar sesión' 
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Función de registro
+  const register = async (userData) => {
+    try {
+      setLoading(true);
+      
+      const result = await apiService.auth.register(userData);
+      
+      if (result.success) {
+        return { success: true, message: result.message };
+      } else {
+        return { success: false, message: result.message };
+      }
+    } catch (error) {
+      console.error('Error en registro:', error);
+      return { 
+        success: false, 
+        message: error.response?.data?.message || 'Error al registrar usuario' 
+      };
+    } finally {
+      setLoading(false);
     }
   };
 
   // Función de cierre de sesión
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
+  const logout = async () => {
+    try {
+      setLoading(true);
+      await apiService.auth.logout();
+    } catch (error) {
+      console.error('Error durante logout:', error);
+    } finally {
+      setUser(null);
+      setLoading(false);
+    }
+  };
+
+  // Verificar si el usuario está autenticado
+  const isAuthenticated = () => {
+    return apiService.auth.isAuthenticated();
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      register, 
+      logout, 
+      loading, 
+      isAuthenticated 
+    }}>
       {children}
     </AuthContext.Provider>
   );
