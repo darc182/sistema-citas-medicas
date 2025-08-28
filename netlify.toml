@@ -4,6 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "18"
+  VITE_API_URL = "https://backend-citas-medicas.onrender.com"
 
 [[redirects]]
   from = "/*"
@@ -12,6 +13,8 @@
 
 [context.production.environment]
   NODE_ENV = "production"
+  VITE_API_URL = "https://backend-citas-medicas.onrender.com"
 
 [context.deploy-preview.environment]
   NODE_ENV = "development"
+  VITE_API_URL = "https://backend-citas-medicas.onrender.com"
