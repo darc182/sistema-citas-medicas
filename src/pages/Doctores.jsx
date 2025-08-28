@@ -10,6 +10,26 @@ const Doctores = () => {
   const [viewMode, setViewMode] = useState('table'); // 'table' o 'cards'
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Helper para formatear el horario de atención
+  const formatHorarioAtencion = (horario) => {
+    if (!horario || typeof horario !== 'object') {
+      return 'Horario no definido';
+    }
+    
+    const diasSpanish = {
+      'lunes': 'Lun',
+      'martes': 'Mar', 
+      'miercoles': 'Mié',
+      'jueves': 'Jue',
+      'viernes': 'Vie',
+      'sabado': 'Sáb',
+      'domingo': 'Dom'
+    };
+    
+    const dias = Object.keys(horario).map(dia => diasSpanish[dia] || dia);
+    return `${dias.join(', ')}`;
+  };
+  
   // Estado para el formulario
   const [currentDoctor, setCurrentDoctor] = useState({
     id: null,
@@ -569,7 +589,7 @@ const Doctores = () => {
                     </p>
                     <p className="card-text text-muted mb-2">
                       <i className="bi bi-clock me-1"></i>
-                      {doctor.horario_atencion}
+                      {formatHorarioAtencion(doctor.horario_atencion)}
                     </p>
                     <div className="mt-auto">
                       <div className="d-flex justify-content-between align-items-center">
